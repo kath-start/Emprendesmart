@@ -1,0 +1,241 @@
+// Esquema de datos del Panel Administrativo de EmprendeSmart
+// Documentación: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum AdminRole {
+  SUPER_ADMIN // control total, gestiona otros administradores
+  ADMIN       // gestión de emprendedores, negocios, alertas
+  ANALYST     // solo lectura de métricas e información
+}
+
+enum AdminStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EntrepreneurStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum PlanType {
+  FREE
+  PRO
+  BUSINESS
+}
+
+enum BusinessStatus {
+  ACTIVE
+  INACTIVE
+  CLOSED
+}
+
+enum BusinessStage {
+  IDEA
+  EARLY
+  GROWTH
+  ESTABLISHED
+}
+
+enum UsageEventType {
+  LOGIN
+  REPORT_VIEW
+  RECOMMENDATION_VIEW
+  METRIC_UPDATE
+  ALERT_VIEW
+  FEATURE_USE
+}
+
+enum RecommendationPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RecommendationStatus {
+  PENDING
+  SENT
+  ACCEPTED
+  DISMISSED
+}
+
+enum RecommendationSource {
+  SYSTEM
+  AI
+  ADMIN
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+// ---------------------------------------------------------------------------
+// Modelos
+// ---------------------------------------------------------------------------
+
+/// Usuarios del panel administrativo (equipo de EmprendeSmart)
+model Admin {
+  id           String      @id @default(uuid())
+  name         String
+  email        String      @unique
+  passwordHash String
+  role         AdminRole   @default(ADMIN)
+  status       AdminStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  reviewedRecommendations Recommendation[] @relation("RecommendationReviewer")
+  resolvedAlerts          Alert[]          @relation("AlertResolver")
+
+  @@index([role])
+  @@index([status])
+}
+
+/// Emprendedores: los clientes que usan el servicio EmprendeSmart
+model Entrepreneur {
+  id           String             @id @default(uuid())
+  firstName    String
+  lastName     String
+  email        String             @unique
+  phone        String?
+  country      String?
+  city         String?
+  plan         PlanType           @default(FREE)
+  status       EntrepreneurStatus @default(ACTIVE)
+  registeredAt DateTime           @default(now())
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  businesses  Business[]
+  usageEvents UsageEvent[]
+
+  @@index([status])
+  @@index([plan])
+  @@index([registeredAt])
+}
+
+/// Negocios / emprendimientos asociados a un emprendedor
+model Business {
+  id             String         @id @default(uuid())
+  entrepreneurId String
+  name           String
+  category       String
+  description    String?
+  stage          BusinessStage  @default(EARLY)
+  status         BusinessStatus @default(ACTIVE)
+  employeesCount Int            @default(1)
+  foundedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  entrepreneur    Entrepreneur     @relation(fields: [entrepreneurId], references: [id], onDelete: Cascade)
+  metrics         BusinessMetric[]
+  recommendations Recommendation[]
+  alerts          Alert[]
+
+  @@index([entrepreneurId])
+  @@index([category])
+  @@index([status])
+}
+
+/// Métricas mensuales de un negocio (información del emprendimiento)
+model BusinessMetric {
+  id             String   @id @default(uuid())
+  businessId     String
+  period         DateTime // primer día del mes al que corresponde la métrica
+  revenue        Decimal  @default(0) @db.Decimal(14, 2)
+  expenses       Decimal  @default(0) @db.Decimal(14, 2)
+  profit         Decimal  @default(0) @db.Decimal(14, 2)
+  customersCount Int      @default(0)
+  salesCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, period])
+  @@index([businessId])
+  @@index([period])
+}
+
+/// Eventos de uso de la plataforma por parte de los emprendedores
+model UsageEvent {
+  id             String         @id @default(uuid())
+  entrepreneurId String
+  type           UsageEventType
+  metadata       Json?
+  occurredAt     DateTime       @default(now())
+
+  entrepreneur Entrepreneur @relation(fields: [entrepreneurId], references: [id], onDelete: Cascade)
+
+  @@index([entrepreneurId])
+  @@index([type])
+  @@index([occurredAt])
+}
+
+/// Recomendaciones generadas por el sistema para un negocio
+model Recommendation {
+  id           String                 @id @default(uuid())
+  businessId   String
+  title        String
+  description  String
+  category     String
+  priority     RecommendationPriority @default(MEDIUM)
+  status       RecommendationStatus   @default(PENDING)
+  source       RecommendationSource   @default(SYSTEM)
+  generatedAt  DateTime               @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  reviewedBy Admin?   @relation("RecommendationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([businessId])
+  @@index([status])
+  @@index([priority])
+  @@index([generatedAt])
+}
+
+/// Alertas generadas por el sistema (riesgos, anomalías, hitos)
+model Alert {
+  id           String        @id @default(uuid())
+  businessId   String
+  type         String
+  severity     AlertSeverity @default(WARNING)
+  message      String
+  status       AlertStatus   @default(OPEN)
+  triggeredAt  DateTime      @default(now())
+  resolvedAt   DateTime?
+  resolvedById String?
+  resolutionNote String?
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  resolvedBy Admin?   @relation("AlertResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([businessId])
+  @@index([status])
+  @@index([severity])
+  @@index([triggeredAt])
+}

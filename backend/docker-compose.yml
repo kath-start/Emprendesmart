@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: emprendesmart-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: emprende
+      POSTGRES_PASSWORD: emprende
+      POSTGRES_DB: emprendesmart
+    ports:
+      - "5432:5432"
+    volumes:
+      - emprendesmart_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U emprende -d emprendesmart"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  emprendesmart_pgdata:

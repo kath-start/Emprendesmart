@@ -1,0 +1,97 @@
+### Variables (usa la extensión REST Client de VS Code)
+@baseUrl = http://localhost:4000/api/v1
+@token = PEGA_AQUI_EL_ACCESS_TOKEN
+
+### Health
+GET http://localhost:4000/health
+
+### Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@emprendesmart.com",
+  "password": "Admin123*"
+}
+
+### Perfil
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+### Dashboard - resumen general
+GET {{baseUrl}}/metrics/overview
+Authorization: Bearer {{token}}
+
+### Dashboard - crecimiento de emprendedores
+GET {{baseUrl}}/metrics/growth?months=12
+Authorization: Bearer {{token}}
+
+### Dashboard - uso de la plataforma
+GET {{baseUrl}}/metrics/usage?months=12
+Authorization: Bearer {{token}}
+
+### Dashboard - negocios por categoría
+GET {{baseUrl}}/metrics/businesses-by-category
+Authorization: Bearer {{token}}
+
+### Dashboard - señales del sistema (recomendaciones + alertas)
+GET {{baseUrl}}/metrics/signals
+Authorization: Bearer {{token}}
+
+### Listar emprendedores
+GET {{baseUrl}}/entrepreneurs?page=1&limit=10&status=ACTIVE
+Authorization: Bearer {{token}}
+
+### Crear emprendedor
+POST {{baseUrl}}/entrepreneurs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Nueva",
+  "lastName": "Emprendedora",
+  "email": "nueva@example.com",
+  "country": "Perú",
+  "city": "Lima",
+  "plan": "PRO"
+}
+
+### Listar negocios
+GET {{baseUrl}}/businesses?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### Registrar métrica mensual de un negocio
+PUT {{baseUrl}}/businesses/BUSINESS_ID/metrics
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "period": "2026-08-01",
+  "revenue": 15000,
+  "expenses": 9000,
+  "customersCount": 120,
+  "salesCount": 340
+}
+
+### Listar recomendaciones pendientes
+GET {{baseUrl}}/recommendations?status=PENDING&priority=HIGH
+Authorization: Bearer {{token}}
+
+### Cambiar estado de una recomendación
+PATCH {{baseUrl}}/recommendations/RECOMMENDATION_ID/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "status": "ACCEPTED" }
+
+### Listar alertas abiertas
+GET {{baseUrl}}/alerts?status=OPEN&severity=CRITICAL
+Authorization: Bearer {{token}}
+
+### Resolver una alerta
+PATCH {{baseUrl}}/alerts/ALERT_ID/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "status": "RESOLVED", "resolutionNote": "Se contactó al emprendedor y se ajustó el flujo de caja." }
