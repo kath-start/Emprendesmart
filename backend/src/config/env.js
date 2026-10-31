@@ -51,4 +51,17 @@ export const env = {
     groqApiKey: read('GROQ_API_KEY'),
     groqModel: read('GROQ_MODEL', { fallback: 'openai/gpt-oss-120b' }),
   },
+  supabase: {
+    url: read('SUPABASE_URL'),
+    secretKey: read('SUPABASE_SECRET_KEY') ?? read('SUPABASE_SERVICE_ROLE_KEY'),
+    productImagesBucket: read('SUPABASE_PRODUCT_IMAGES_BUCKET', { fallback: 'product-images' }),
+  },
+  mail: {
+    // Gmail con contraseña de aplicación: tiene prioridad sobre Resend y envía a cualquier correo.
+    gmailUser: read('GMAIL_USER'),
+    gmailAppPassword: read('GMAIL_APP_PASSWORD')?.replace(/\s/g, ''),
+    resendApiKey: read('RESEND_API_KEY'),
+    // Sin dominio verificado en Resend, onboarding@resend.dev solo entrega al email de tu cuenta de Resend.
+    from: read('MAIL_FROM', { fallback: 'EmprendeSmart <onboarding@resend.dev>' }),
+  },
 };

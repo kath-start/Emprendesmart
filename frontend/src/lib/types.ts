@@ -1,7 +1,7 @@
 export type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'ANALYST';
 export type AdminStatus = 'ACTIVE' | 'INACTIVE';
 export type EntrepreneurStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
-export type PlanType = 'FREE' | 'PRO' | 'BUSINESS';
+export type PlanType = 'FREE' | 'EMPRENDE' | 'CRECIMIENTO' | 'PRO';
 export type BusinessStatus = 'ACTIVE' | 'INACTIVE' | 'CLOSED';
 export type BusinessStage = 'IDEA' | 'EARLY' | 'GROWTH' | 'ESTABLISHED';
 export type UsageEventType =
@@ -237,4 +237,43 @@ export interface UsageSummary {
   totalEvents: number;
   activeEntrepreneurs: number;
   byType: { type: UsageEventType; count: number }[];
+}
+
+export type PlanPaymentStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED';
+
+export interface PaymentSettings {
+  id: string;
+  yapeQrUrl: string | null;
+  yapeHolderName: string | null;
+  yapePhone: string | null;
+  deviceKey: string;
+  updatedAt: string;
+}
+
+export interface YapeNotification {
+  id: string;
+  paymentMethod: string;
+  amount: number | null;
+  senderName: string | null;
+  message: string;
+  packageName: string | null;
+  notifiedAt: string;
+  createdAt: string;
+  planPayment?: Pick<PlanPayment, 'id' | 'payerName' | 'plan' | 'amount' | 'status'> | null;
+}
+
+export interface PlanPayment {
+  id: string;
+  entrepreneurId: string;
+  plan: PlanType;
+  amount: number;
+  payerName: string;
+  status: PlanPaymentStatus;
+  notificationId: string | null;
+  confirmedById: string | null;
+  confirmedAt: string | null;
+  rejectedReason: string | null;
+  createdAt: string;
+  entrepreneur?: Pick<Entrepreneur, 'id' | 'firstName' | 'lastName' | 'email' | 'plan'>;
+  notification?: YapeNotification | null;
 }

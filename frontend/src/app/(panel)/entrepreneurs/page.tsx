@@ -143,8 +143,9 @@ export default function EntrepreneursPage() {
           >
             <option value="">Todos los planes</option>
             <option value="FREE">FREE</option>
+            <option value="EMPRENDE">EMPRENDE</option>
+            <option value="CRECIMIENTO">CRECIMIENTO</option>
             <option value="PRO">PRO</option>
-            <option value="BUSINESS">BUSINESS</option>
           </Select>
         </div>
 

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { paginationQuery } from '../../utils/validation.js';
 
 const STATUSES = ['ACTIVE', 'INACTIVE', 'SUSPENDED'];
-const PLANS = ['FREE', 'PRO', 'BUSINESS'];
+const PLANS = ['FREE', 'EMPRENDE', 'CRECIMIENTO', 'PRO'];
 
 export const listSchema = z.object({
   query: z.object({

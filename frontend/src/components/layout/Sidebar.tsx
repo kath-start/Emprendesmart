@@ -11,6 +11,7 @@ import {
   Activity,
   ShieldCheck,
   Sparkles,
+  Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: '/recommendations', label: 'Recomendaciones', icon: Lightbulb },
   { href: '/alerts', label: 'Alertas', icon: AlertTriangle },
   { href: '/usage', label: 'Uso de la plataforma', icon: Activity },
+  { href: '/payments', label: 'Pagos', icon: Wallet },
 ];
 
 export function Sidebar() {

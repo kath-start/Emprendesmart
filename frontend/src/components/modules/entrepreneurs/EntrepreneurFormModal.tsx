@@ -109,8 +109,9 @@ export function EntrepreneurFormModal({
           <Field label="Plan">
             <Select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })}>
               <option value="FREE">FREE</option>
+              <option value="EMPRENDE">EMPRENDE</option>
+              <option value="CRECIMIENTO">CRECIMIENTO</option>
               <option value="PRO">PRO</option>
-              <option value="BUSINESS">BUSINESS</option>
             </Select>
           </Field>
         </div>

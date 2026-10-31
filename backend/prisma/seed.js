@@ -29,6 +29,10 @@ async function main() {
   console.log('Limpiando datos previos...');
   await prisma.$transaction([
     prisma.usageEvent.deleteMany(),
+    prisma.saleItem.deleteMany(),
+    prisma.sale.deleteMany(),
+    prisma.inventoryMovement.deleteMany(),
+    prisma.product.deleteMany(),
     prisma.alert.deleteMany(),
     prisma.recommendation.deleteMany(),
     prisma.businessMetric.deleteMany(),
@@ -68,21 +72,27 @@ async function main() {
 
   // ---- Emprendedores + negocios ----
   const totalEntrepreneurs = 24;
+  const appPassword = process.env.SEED_APP_ENTREPRENEUR_PASSWORD ?? 'Entrepreneur123*';
+  const appPasswordHash = await bcrypt.hash(appPassword, rounds);
+
   for (let i = 0; i < totalEntrepreneurs; i += 1) {
     const [country, city] = pick(CITIES);
     const firstName = pick(FIRST_NAMES);
     const lastName = `${pick(LAST_NAMES)} ${pick(LAST_NAMES)}`;
     const registeredAt = monthStart(rand(0, 11));
+    // Los dos primeros ya tienen cuenta en la app móvil (contraseña conocida para pruebas).
+    const hasAppAccount = i < 2;
 
     const entrepreneur = await prisma.entrepreneur.create({
       data: {
         firstName,
         lastName,
         email: `emprendedor${i + 1}@example.com`,
+        passwordHash: hasAppAccount ? appPasswordHash : null,
         phone: `+51 9${rand(10000000, 99999999)}`,
         country,
         city,
-        plan: pick(['FREE', 'FREE', 'PRO', 'PRO', 'BUSINESS']),
+        plan: pick(['FREE', 'FREE', 'EMPRENDE', 'CRECIMIENTO', 'PRO']),
         status: pick(['ACTIVE', 'ACTIVE', 'ACTIVE', 'INACTIVE', 'SUSPENDED']),
         registeredAt,
       },
@@ -102,6 +112,49 @@ async function main() {
           foundedAt: monthStart(rand(6, 36)),
         },
       });
+
+      // Catálogo de productos + una venta de ejemplo para el primer negocio de cada
+      // cuenta con acceso a la app móvil, así hay datos reales al iniciar sesión.
+      if (hasAppAccount && b === 0) {
+        const products = await Promise.all(
+          [
+            { name: 'Producto A', price: 25, cost: 15, stock: 40, lowStockThreshold: 10 },
+            { name: 'Producto B', price: 60, cost: 35, stock: 8, lowStockThreshold: 10 },
+            { name: 'Producto C', price: 12, cost: 6, stock: 100, lowStockThreshold: 20 },
+          ].map((product) =>
+            prisma.product.create({
+              data: { ...product, businessId: business.id, category: business.category, unit: 'unidad' },
+            }),
+          ),
+        );
+
+        for (const product of products) {
+          await prisma.inventoryMovement.create({
+            data: { productId: product.id, type: 'RESTOCK', quantity: product.stock, note: 'Carga inicial de inventario' },
+          });
+        }
+
+        const firstProduct = products[0];
+        const quantitySold = 3;
+        const unitPrice = firstProduct.price;
+        const subtotal = Number(unitPrice) * quantitySold;
+        await prisma.$transaction([
+          prisma.sale.create({
+            data: {
+              businessId: business.id,
+              total: subtotal,
+              items: { create: [{ productId: firstProduct.id, quantity: quantitySold, unitPrice, subtotal }] },
+            },
+          }),
+          prisma.product.update({
+            where: { id: firstProduct.id },
+            data: { stock: firstProduct.stock - quantitySold },
+          }),
+          prisma.inventoryMovement.create({
+            data: { productId: firstProduct.id, type: 'SALE', quantity: quantitySold, note: 'Venta de ejemplo' },
+          }),
+        ]);
+      }
 
       // Métricas de los últimos 6 meses
       for (let m = 5; m >= 0; m -= 1) {
@@ -182,10 +235,14 @@ async function main() {
     recommendations: await prisma.recommendation.count(),
     alerts: await prisma.alert.count(),
     usageEvents: await prisma.usageEvent.count(),
+    products: await prisma.product.count(),
+    sales: await prisma.sale.count(),
+    inventoryMovements: await prisma.inventoryMovement.count(),
   };
 
   console.log('Seed completado:', counts);
   console.log(`\nAcceso al panel -> ${superEmail} / ${superPassword}`);
+  console.log(`Acceso a la app (emprendedor1@example.com / emprendedor2@example.com) -> ${appPassword}`);
 }
 
 main()

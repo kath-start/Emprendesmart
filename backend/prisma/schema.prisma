@@ -17,8 +17,8 @@ datasource db {
 
 enum AdminRole {
   SUPER_ADMIN // control total, gestiona otros administradores
-  ADMIN       // gestión de emprendedores, negocios, alertas
-  ANALYST     // solo lectura de métricas e información
+  ADMIN // gestión de emprendedores, negocios, alertas
+  ANALYST // solo lectura de métricas e información
 }
 
 enum AdminStatus {
@@ -32,10 +32,23 @@ enum EntrepreneurStatus {
   SUSPENDED
 }
 
+/// Rol de una persona invitada a un negocio (el dueño no aparece aquí: es Business.entrepreneurId)
+enum BusinessRole {
+  PARTNER
+  CASHIER
+}
+
+enum PlanPaymentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
 enum PlanType {
   FREE
+  EMPRENDE
+  CRECIMIENTO
   PRO
-  BUSINESS
 }
 
 enum BusinessStatus {
@@ -91,6 +104,18 @@ enum AlertStatus {
   RESOLVED
 }
 
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum InventoryMovementType {
+  RESTOCK
+  SALE
+  ADJUSTMENT
+  RETURN
+}
+
 // ---------------------------------------------------------------------------
 // Modelos
 // ---------------------------------------------------------------------------
@@ -120,6 +145,7 @@ model Entrepreneur {
   firstName    String
   lastName     String
   email        String             @unique
+  passwordHash String? // null hasta que el emprendedor se registra en la app móvil
   phone        String?
   country      String?
   city         String?
@@ -129,12 +155,30 @@ model Entrepreneur {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 
-  businesses  Business[]
-  usageEvents UsageEvent[]
+  businesses         Business[]
+  usageEvents        UsageEvent[]
+  passwordResetCodes PasswordResetCode[]
+  planPayments       PlanPayment[]
+  salesMade          Sale[]              @relation("SaleSeller")
 
   @@index([status])
   @@index([plan])
   @@index([registeredAt])
+}
+
+/// Códigos de un solo uso para recuperar la contraseña desde la app móvil
+model PasswordResetCode {
+  id             String    @id @default(uuid())
+  entrepreneurId String
+  codeHash       String
+  expiresAt      DateTime
+  attempts       Int       @default(0)
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  entrepreneur Entrepreneur @relation(fields: [entrepreneurId], references: [id], onDelete: Cascade)
+
+  @@index([entrepreneurId, createdAt])
 }
 
 /// Negocios / emprendimientos asociados a un emprendedor
@@ -142,12 +186,18 @@ model Business {
   id             String         @id @default(uuid())
   entrepreneurId String
   name           String
+  /// Logo del negocio (imagen pública en Supabase Storage)
+  logoUrl        String?
   category       String
   description    String?
   stage          BusinessStage  @default(EARLY)
   status         BusinessStatus @default(ACTIVE)
   employeesCount Int            @default(1)
   foundedAt      DateTime?
+  /// Plan de lanzamiento de la etapa IDEA (cliente, precio, inversión, canales); lo llena la app.
+  ideaPlan       Json?
+  /// Meta de ventas del mes que se pone el emprendedor (etapas de crecimiento en adelante).
+  monthlySalesGoal Decimal?     @db.Decimal(12, 2)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -155,6 +205,9 @@ model Business {
   metrics         BusinessMetric[]
   recommendations Recommendation[]
   alerts          Alert[]
+  products        Product[]
+  sales           Sale[]
+  members         BusinessMember[]
 
   @@index([entrepreneurId])
   @@index([category])
@@ -220,15 +273,15 @@ model Recommendation {
 
 /// Alertas generadas por el sistema (riesgos, anomalías, hitos)
 model Alert {
-  id           String        @id @default(uuid())
-  businessId   String
-  type         String
-  severity     AlertSeverity @default(WARNING)
-  message      String
-  status       AlertStatus   @default(OPEN)
-  triggeredAt  DateTime      @default(now())
-  resolvedAt   DateTime?
-  resolvedById String?
+  id             String        @id @default(uuid())
+  businessId     String
+  type           String
+  severity       AlertSeverity @default(WARNING)
+  message        String
+  status         AlertStatus   @default(OPEN)
+  triggeredAt    DateTime      @default(now())
+  resolvedAt     DateTime?
+  resolvedById   String?
   resolutionNote String?
 
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -238,4 +291,149 @@ model Alert {
   @@index([status])
   @@index([severity])
   @@index([triggeredAt])
+}
+
+/// Productos del catálogo de un negocio (app móvil del emprendedor)
+model Product {
+  id                String        @id @default(uuid())
+  businessId        String
+  name              String
+  description       String?
+  category          String?
+  sku               String?
+  imageUrl          String?
+  unit              String?
+  price             Decimal       @db.Decimal(12, 2)
+  cost              Decimal?      @db.Decimal(12, 2)
+  stock             Int           @default(0)
+  lowStockThreshold Int           @default(5)
+  status            ProductStatus @default(ACTIVE)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  business  Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  movements InventoryMovement[]
+  saleItems SaleItem[]
+
+  @@index([businessId])
+  @@index([status])
+  @@index([category])
+}
+
+/// Historial de movimientos de inventario de un producto
+model InventoryMovement {
+  id         String                @id @default(uuid())
+  productId  String
+  type       InventoryMovementType
+  quantity   Int
+  note       String?
+  occurredAt DateTime              @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([type])
+  @@index([occurredAt])
+}
+
+/// Venta registrada por el emprendedor desde la app móvil
+model Sale {
+  id         String   @id @default(uuid())
+  businessId String
+  soldAt     DateTime @default(now())
+  total      Decimal  @db.Decimal(14, 2)
+  notes      String?
+  /// Quién registró la venta (dueño o alguien de su equipo)
+  sellerId   String?
+  createdAt  DateTime @default(now())
+
+  business Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  seller   Entrepreneur? @relation("SaleSeller", fields: [sellerId], references: [id], onDelete: SetNull)
+  items    SaleItem[]
+
+  @@index([businessId])
+  @@index([soldAt])
+}
+
+/// Línea de una venta
+model SaleItem {
+  id        String  @id @default(uuid())
+  saleId    String
+  productId String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+  subtotal  Decimal @db.Decimal(14, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+/// Datos de cobro que ve el emprendedor al pagar un plan (una sola fila, id "default")
+model PaymentSettings {
+  id             String   @id @default("default")
+  yapeQrUrl      String?
+  yapeHolderName String?
+  yapePhone      String?
+  /// Código que usa el celular con Yape para enviar sus notificaciones al API
+  deviceKey      String   @unique
+  updatedAt      DateTime @updatedAt
+}
+
+/// Solicitud de pago de un plan: el emprendedor yapea y avisa con el nombre de su Yape
+model PlanPayment {
+  id             String            @id @default(uuid())
+  entrepreneurId String
+  plan           PlanType
+  amount         Decimal           @db.Decimal(10, 2)
+  payerName      String
+  status         PlanPaymentStatus @default(PENDING)
+  notificationId String?           @unique
+  confirmedById  String?
+  confirmedAt    DateTime?
+  rejectedReason String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  entrepreneur Entrepreneur      @relation(fields: [entrepreneurId], references: [id], onDelete: Cascade)
+  notification YapeNotification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+
+  @@index([status, amount])
+  @@index([entrepreneurId, createdAt])
+}
+
+/// Notificación de pago recibido leída del celular del negocio (app de notificaciones)
+model YapeNotification {
+  id            String   @id @default(uuid())
+  paymentMethod String   @default("yape")
+  amount        Decimal? @db.Decimal(10, 2)
+  senderName    String?
+  message       String
+  packageName   String?
+  notifiedAt    DateTime
+  createdAt     DateTime @default(now())
+
+  planPayment PlanPayment?
+
+  /// La app reintenta envíos: el mismo aviso no debe guardarse dos veces
+  @@unique([message, notifiedAt])
+  @@index([amount, notifiedAt])
+}
+
+/// Persona invitada a un negocio (plan Pro). Se identifica por email: al registrarse
+/// en la app con ese correo, el negocio le aparece con los permisos de su rol.
+model BusinessMember {
+  id         String       @id @default(uuid())
+  businessId String
+  email      String
+  role       BusinessRole
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, email])
+  @@index([email])
 }

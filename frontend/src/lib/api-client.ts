@@ -48,6 +48,8 @@ export interface RequestOptions {
   body?: unknown;
   query?: object;
   skipAuth?: boolean;
+  /** Cuerpo binario (ej. una imagen) en lugar de JSON. */
+  file?: Blob;
 }
 
 function buildUrl(path: string, query?: object) {
@@ -63,7 +65,9 @@ function buildUrl(path: string, query?: object) {
 }
 
 async function rawRequest<T>(path: string, options: RequestOptions, accessToken: string | null) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    'Content-Type': options.file ? options.file.type || 'application/octet-stream' : 'application/json',
+  };
   if (accessToken && !options.skipAuth) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
@@ -71,7 +75,7 @@ async function rawRequest<T>(path: string, options: RequestOptions, accessToken:
   const res = await fetch(buildUrl(path, options.query), {
     method: options.method ?? 'GET',
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: options.file ?? (options.body !== undefined ? JSON.stringify(options.body) : undefined),
   });
 
   const body = (await res.json().catch(() => null)) as ApiSuccess<T> | ApiFailure | null;

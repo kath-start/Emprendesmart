@@ -15,7 +15,7 @@ export function sanitizeAdmin(admin) {
 }
 
 function issueTokens(admin) {
-  const payload = { sub: admin.id, role: admin.role, email: admin.email };
+  const payload = { sub: admin.id, role: admin.role, email: admin.email, type: 'admin' };
   return {
     accessToken: signAccessToken(payload),
     refreshToken: signRefreshToken(payload),
@@ -46,6 +46,10 @@ export async function refresh({ refreshToken }) {
   try {
     payload = verifyRefreshToken(refreshToken);
   } catch {
+    throw ApiError.unauthorized('Refresh token inválido o expirado');
+  }
+
+  if (payload.type !== 'admin') {
     throw ApiError.unauthorized('Refresh token inválido o expirado');
   }
 

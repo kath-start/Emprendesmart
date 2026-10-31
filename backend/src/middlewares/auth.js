@@ -12,6 +12,9 @@ export const authenticate = (req, res, next) => {
 
   try {
     const payload = verifyAccessToken(token);
+    if (payload.type !== 'admin') {
+      return next(ApiError.unauthorized('Token de acceso inválido o expirado'));
+    }
     req.user = { id: payload.sub, role: payload.role, email: payload.email };
     return next();
   } catch {

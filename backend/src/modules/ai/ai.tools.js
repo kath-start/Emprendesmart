@@ -28,7 +28,7 @@ export const chatTools = [
         properties: {
           search: { type: 'string', description: 'Texto a buscar en nombre o email' },
           status: { type: 'string', enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED'] },
-          plan: { type: 'string', enum: ['FREE', 'PRO', 'BUSINESS'] },
+          plan: { type: 'string', enum: ['FREE', 'EMPRENDE', 'CRECIMIENTO', 'PRO'] },
         },
         additionalProperties: false,
       },

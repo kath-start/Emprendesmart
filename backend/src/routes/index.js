@@ -9,6 +9,8 @@ import { usageRoutes } from '../modules/usage/usage.routes.js';
 import { recommendationRoutes } from '../modules/recommendations/recommendation.routes.js';
 import { alertRoutes } from '../modules/alerts/alert.routes.js';
 import { aiRoutes } from '../modules/ai/ai.routes.js';
+import { paymentRoutes } from '../modules/payments/payment.routes.js';
+import { appRoutes } from './app.routes.js';
 
 export const router = Router();
 
@@ -27,6 +29,8 @@ router.get('/', (req, res) => {
       '/api/v1/recommendations',
       '/api/v1/alerts',
       '/api/v1/ai',
+      '/api/v1/payments',
+      '/api/v1/app',
     ],
   });
 });
@@ -40,3 +44,5 @@ router.use('/usage', usageRoutes);
 router.use('/recommendations', recommendationRoutes);
 router.use('/alerts', alertRoutes);
 router.use('/ai', aiRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/app', appRoutes);
