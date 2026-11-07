@@ -10,9 +10,9 @@ import {
   AlertTriangle,
   Activity,
   ShieldCheck,
-  Sparkles,
   Wallet,
 } from 'lucide-react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 
@@ -33,9 +33,7 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
       <div className="flex items-center gap-2 px-5 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
-          <Sparkles className="h-4 w-4" />
-        </div>
+        <Image src="/logo-icon.png" alt="" width={36} height={36} className="h-9 w-9 object-contain" />
         <div>
           <p className="text-sm font-semibold text-slate-900">EmprendeSmart</p>
           <p className="text-xs text-slate-500">Panel Web</p>

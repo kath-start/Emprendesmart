@@ -146,10 +146,14 @@ model Entrepreneur {
   lastName     String
   email        String             @unique
   passwordHash String? // null hasta que el emprendedor se registra en la app móvil
+  /// Cuenta de Firebase Auth (Google o teléfono/SMS) vinculada; null si solo usa correo y contraseña.
+  firebaseUid  String?            @unique
   phone        String?
   country      String?
   city         String?
   plan         PlanType           @default(FREE)
+  /// Hasta cuándo está pagado el plan (30 días por pago). null = sin vencimiento (Gratis o asignado a mano).
+  planExpiresAt DateTime?
   status       EntrepreneurStatus @default(ACTIVE)
   registeredAt DateTime           @default(now())
   createdAt    DateTime           @default(now())
@@ -343,6 +347,8 @@ model Sale {
   soldAt     DateTime @default(now())
   total      Decimal  @db.Decimal(14, 2)
   notes      String?
+  /// Cómo pagó el cliente: efectivo, yape o plin (null en ventas antiguas)
+  paymentMethod String?
   /// Quién registró la venta (dueño o alguien de su equipo)
   sellerId   String?
   createdAt  DateTime @default(now())

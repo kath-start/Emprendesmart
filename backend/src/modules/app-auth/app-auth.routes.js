@@ -7,8 +7,11 @@ import * as controller from './app-auth.controller.js';
 import {
   registerSchema,
   loginSchema,
+  firebaseLoginSchema,
   refreshSchema,
   changePasswordSchema,
+  updateProfileSchema,
+  changeEmailSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   directResetPasswordSchema,
@@ -25,10 +28,23 @@ const passwordResetLimiter = rateLimit({
   message: { success: false, message: 'Demasiados intentos, espera unos minutos e inténtalo de nuevo' },
 });
 
+// Inicio con Google/SMS: el token ya viene verificado por Firebase, el límite solo frena abusos.
+const firebaseLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Demasiados intentos, espera unos minutos e inténtalo de nuevo' },
+});
+
 appAuthRoutes.post('/register', validate(registerSchema), controller.register);
 appAuthRoutes.post('/login', validate(loginSchema), controller.login);
+// Google o teléfono/SMS vía Firebase Auth.
+appAuthRoutes.post('/firebase', firebaseLoginLimiter, validate(firebaseLoginSchema), controller.firebaseLogin);
 appAuthRoutes.post('/refresh', validate(refreshSchema), controller.refresh);
 appAuthRoutes.get('/me', authenticateEntrepreneur, controller.me);
+appAuthRoutes.patch('/me', authenticateEntrepreneur, validate(updateProfileSchema), controller.updateProfile);
+appAuthRoutes.post('/change-email', authenticateEntrepreneur, validate(changeEmailSchema), controller.changeEmail);
 appAuthRoutes.post(
   '/change-password',
   authenticateEntrepreneur,

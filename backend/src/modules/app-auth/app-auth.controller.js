@@ -12,6 +12,11 @@ export const login = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
+export const firebaseLogin = asyncHandler(async (req, res) => {
+  const result = await authService.firebaseLogin(req.body);
+  return ok(res, result);
+});
+
 export const refresh = asyncHandler(async (req, res) => {
   const tokens = await authService.refresh(req.body);
   return ok(res, tokens);
@@ -19,6 +24,16 @@ export const refresh = asyncHandler(async (req, res) => {
 
 export const me = asyncHandler(async (req, res) => {
   const entrepreneur = await authService.getProfile(req.entrepreneur.id);
+  return ok(res, entrepreneur);
+});
+
+export const updateProfile = asyncHandler(async (req, res) => {
+  const entrepreneur = await authService.updateProfile(req.entrepreneur.id, req.body);
+  return ok(res, entrepreneur);
+});
+
+export const changeEmail = asyncHandler(async (req, res) => {
+  const entrepreneur = await authService.changeEmail(req.entrepreneur.id, req.body);
   return ok(res, entrepreneur);
 });
 

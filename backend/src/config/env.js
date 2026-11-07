@@ -64,4 +64,8 @@ export const env = {
     // Sin dominio verificado en Resend, onboarding@resend.dev solo entrega al email de tu cuenta de Resend.
     from: read('MAIL_FROM', { fallback: 'EmprendeSmart <onboarding@resend.dev>' }),
   },
+  firebase: {
+    // Solo se usa para validar los ID tokens de Firebase Auth (Google / SMS); no necesita llave privada.
+    projectId: read('FIREBASE_PROJECT_ID', { fallback: 'emprendesmart-75583' }),
+  },
 };

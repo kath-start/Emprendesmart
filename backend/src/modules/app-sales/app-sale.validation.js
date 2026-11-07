@@ -17,6 +17,7 @@ export const createSchema = z.object({
   params: z.object({ businessId: z.string().uuid() }),
   body: z.object({
     notes: z.string().max(500).optional(),
+    paymentMethod: z.enum(['efectivo', 'yape', 'plin']).optional(),
     items: z
       .array(
         z.object({

@@ -13,6 +13,33 @@ const { Prisma } = pkg;
 /** Precio mensual de cada plan de pago, en soles. */
 export const PLAN_PRICES = { EMPRENDE: 19.9, CRECIMIENTO: 39.9, PRO: 69.9 };
 
+/** Cada pago cubre 30 días del plan. */
+const PLAN_PERIOD_DAYS = 30;
+/** Días de gracia después del vencimiento antes de volver al plan Gratis. */
+export const PLAN_GRACE_DAYS = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Nuevo vencimiento al confirmar un pago: si renueva el mismo plan antes de que venza,
+ * los 30 días se suman a lo que le quedaba; si no, cuentan desde hoy.
+ */
+function nextExpiry(entrepreneur, plan, now = new Date()) {
+  const current = entrepreneur.planExpiresAt;
+  const base = entrepreneur.plan === plan && current && current > now ? current : now;
+  return new Date(base.getTime() + PLAN_PERIOD_DAYS * DAY_MS);
+}
+
+/** Baja a Gratis a quienes no renovaron dentro de los días de gracia. Devuelve cuántos cambió. */
+export async function expireOverduePlans(now = new Date()) {
+  const limit = new Date(now.getTime() - PLAN_GRACE_DAYS * DAY_MS);
+  const { count } = await prisma.entrepreneur.updateMany({
+    where: { plan: { not: 'FREE' }, planExpiresAt: { lt: limit } },
+    data: { plan: 'FREE', planExpiresAt: null },
+  });
+  if (count > 0) logger.info(`Planes vencidos pasados a Gratis: ${count}`);
+  return count;
+}
+
 /** Un aviso de Yape y una solicitud de pago solo se emparejan si ocurrieron con menos de 2 h de diferencia. */
 const MATCH_WINDOW_MS = 2 * 60 * 60 * 1000;
 const SETTINGS_ID = 'default';
@@ -126,7 +153,11 @@ async function confirmPayment(payment, { notificationId = null, adminId = null }
         data: { status: 'CONFIRMED', notificationId, confirmedById: adminId, confirmedAt: new Date() },
       });
       if (count === 0) return false;
-      await tx.entrepreneur.update({ where: { id: payment.entrepreneurId }, data: { plan: payment.plan } });
+      const entrepreneur = await tx.entrepreneur.findUnique({ where: { id: payment.entrepreneurId } });
+      await tx.entrepreneur.update({
+        where: { id: payment.entrepreneurId },
+        data: { plan: payment.plan, planExpiresAt: nextExpiry(entrepreneur, payment.plan) },
+      });
       return true;
     });
   } catch (error) {
@@ -204,7 +235,8 @@ export async function receiveNotification({ paymentMethod, message, notifiedAt, 
 export async function createPlanPayment(entrepreneurId, { plan, payerName }) {
   const entrepreneur = await prisma.entrepreneur.findUnique({ where: { id: entrepreneurId } });
   if (!entrepreneur) throw ApiError.notFound('Emprendedor no encontrado');
-  if (entrepreneur.plan === plan) throw ApiError.conflict('Ya tienes este plan');
+  // Un plan con vencimiento se puede renovar; uno sin vencimiento (asignado a mano) no hace falta pagarlo.
+  if (entrepreneur.plan === plan && !entrepreneur.planExpiresAt) throw ApiError.conflict('Ya tienes este plan');
 
   // Una sola solicitud abierta por emprendedor: la nueva reemplaza a la anterior.
   await prisma.planPayment.updateMany({

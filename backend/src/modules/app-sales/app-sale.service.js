@@ -33,7 +33,7 @@ export async function getById(businessId, entrepreneurId, saleId) {
   return sale;
 }
 
-export async function create(businessId, entrepreneurId, { items, notes }) {
+export async function create(businessId, entrepreneurId, { items, notes, paymentMethod }) {
   await getBusinessAccessOrThrow(businessId, entrepreneurId, 'sell');
 
   const productIds = [...new Set(items.map((item) => item.productId))];
@@ -65,34 +65,55 @@ export async function create(businessId, entrepreneurId, { items, notes }) {
   });
   const total = saleItemsData.reduce((sum, item) => sum + Number(item.subtotal), 0);
 
-  const alerts = [];
+  let alerts = [];
 
   const sale = await prisma.$transaction(async (tx) => {
     const createdSale = await tx.sale.create({
-      data: { businessId, notes, total, sellerId: entrepreneurId, items: { create: saleItemsData } },
+      data: {
+        businessId,
+        notes,
+        ...(paymentMethod ? { paymentMethod } : {}),
+        total,
+        sellerId: entrepreneurId,
+        items: { create: saleItemsData },
+      },
       include: { items: true, seller: SELLER },
     });
 
+    const lowStockAlerts = [];
     for (const [productId, quantity] of quantityByProduct) {
       const product = productMap.get(productId);
-      const newStock = product.stock - quantity;
-
-      await tx.product.update({ where: { id: productId }, data: { stock: newStock } });
-      await tx.inventoryMovement.create({
-        data: { productId, type: 'SALE', quantity, note: `Venta ${createdSale.id}` },
+      // Descuento atómico: si otra venta se llevó el stock mientras tanto, no queda en negativo.
+      const { count } = await tx.product.updateMany({
+        where: { id: productId, stock: { gte: quantity } },
+        data: { stock: { decrement: quantity } },
       });
-
-      if (newStock <= product.lowStockThreshold) {
-        const alert = await tx.alert.create({
-          data: {
-            businessId,
-            type: 'STOCK_BAJO',
-            severity: 'WARNING',
-            message: `Stock bajo para "${product.name}": quedan ${newStock} unidades`,
-          },
-        });
-        alerts.push(alert);
+      if (count === 0) {
+        throw ApiError.badRequest(`Stock insuficiente para "${product.name}"`);
       }
+
+      const newStock = product.stock - quantity;
+      if (newStock <= product.lowStockThreshold) {
+        lowStockAlerts.push({
+          businessId,
+          type: 'STOCK_BAJO',
+          severity: 'WARNING',
+          message: `Stock bajo para "${product.name}": quedan ${newStock} unidades`,
+        });
+      }
+    }
+
+    // Movimientos y alertas en una sola consulta cada uno (la base de datos está lejos: menos idas y vueltas).
+    await tx.inventoryMovement.createMany({
+      data: [...quantityByProduct].map(([productId, quantity]) => ({
+        productId,
+        type: 'SALE',
+        quantity,
+        note: `Venta ${createdSale.id}`,
+      })),
+    });
+    if (lowStockAlerts.length > 0) {
+      alerts = await tx.alert.createManyAndReturn({ data: lowStockAlerts });
     }
 
     return createdSale;

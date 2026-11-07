@@ -5,6 +5,7 @@ import { ApiError } from '../../utils/apiError.js';
 import { verifyPassword, hashPassword } from '../../utils/password.js';
 import { sendMail } from '../../utils/mailer.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt.js';
+import { verifyFirebaseIdToken } from '../../utils/firebase.js';
 
 /** Elimina el hash de contraseña antes de exponer el emprendedor. */
 export function sanitizeEntrepreneur(entrepreneur) {
@@ -43,8 +44,31 @@ export async function register({ firstName, lastName, email, password, phone, co
   return { entrepreneur: sanitizeEntrepreneur(entrepreneur), ...issueTokens(entrepreneur) };
 }
 
+/**
+ * Cuenta cuyo teléfono guardado coincide con lo que escribió el usuario, con o sin código de país
+ * ("929020723" encuentra "+51 929 020 723" y viceversa). Si hay más de una, no se adivina.
+ */
+async function findByTypedPhone(typed) {
+  const digits = typed.replace(/\D/g, '');
+  if (digits.length < 6) return null;
+  const rows = await prisma.$queryRaw`
+    SELECT id FROM "Entrepreneur"
+    WHERE phone IS NOT NULL
+      AND length(regexp_replace(phone, '[^0-9]', '', 'g')) >= 6
+      AND (
+        regexp_replace(phone, '[^0-9]', '', 'g') LIKE '%' || ${digits}
+        OR ${digits} LIKE '%' || regexp_replace(phone, '[^0-9]', '', 'g')
+      )
+    LIMIT 2`;
+  if (rows.length !== 1) return null;
+  return prisma.entrepreneur.findUnique({ where: { id: rows[0].id } });
+}
+
 export async function login({ email, password }) {
-  const entrepreneur = await prisma.entrepreneur.findUnique({ where: { email: email.toLowerCase() } });
+  const identifier = email.trim();
+  const entrepreneur = identifier.includes('@')
+    ? await prisma.entrepreneur.findUnique({ where: { email: identifier.toLowerCase() } })
+    : await findByTypedPhone(identifier);
   if (!entrepreneur || entrepreneur.status !== 'ACTIVE' || !entrepreneur.passwordHash) {
     throw ApiError.unauthorized('Credenciales inválidas');
   }
@@ -60,6 +84,102 @@ export async function login({ email, password }) {
       type: 'LOGIN',
       metadata: { source: 'mobile' },
     },
+  });
+
+  return { entrepreneur: sanitizeEntrepreneur(entrepreneur), ...issueTokens(entrepreneur) };
+}
+
+/** Cuenta cuyo teléfono guardado coincide con el verificado por SMS (formato libre: "+51 929 020 723"). */
+async function findByVerifiedPhone(e164) {
+  const digits = e164.replace(/\D/g, '');
+  const rows = await prisma.$queryRaw`
+    SELECT id FROM "Entrepreneur"
+    WHERE phone IS NOT NULL
+      AND length(regexp_replace(phone, '[^0-9]', '', 'g')) >= 8
+      AND ${digits} LIKE '%' || regexp_replace(phone, '[^0-9]', '', 'g')
+    LIMIT 2`;
+  // Si el número aparece en más de una cuenta no se adivina cuál es: se trata como cuenta nueva.
+  if (rows.length !== 1) return null;
+  return prisma.entrepreneur.findUnique({ where: { id: rows[0].id } });
+}
+
+function splitName(fullName) {
+  const parts = (fullName ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: null, lastName: null };
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  // "Ana María López Pérez" -> nombres = mitad inicial, apellidos = el resto.
+  const half = Math.ceil(parts.length / 2);
+  return { firstName: parts.slice(0, half).join(' '), lastName: parts.slice(half).join(' ') };
+}
+
+/**
+ * Inicio de sesión con Firebase Auth (Google o teléfono/SMS).
+ * Vincula la cuenta existente por uid, correo verificado o teléfono; si no existe la crea.
+ * Con teléfono y sin cuenta, devuelve `needsProfile` para que la app pida nombre y correo.
+ */
+export async function firebaseLogin({ idToken, firstName, lastName, email }) {
+  let decoded;
+  try {
+    decoded = await verifyFirebaseIdToken(idToken);
+  } catch {
+    throw ApiError.unauthorized('No pudimos verificar tu cuenta. Inténtalo de nuevo');
+  }
+
+  const uid = decoded.uid;
+  const provider = decoded.firebase?.sign_in_provider ?? 'unknown';
+  const verifiedEmail = decoded.email && decoded.email_verified ? decoded.email.toLowerCase() : null;
+  const verifiedPhone = decoded.phone_number ?? null;
+
+  let entrepreneur = await prisma.entrepreneur.findUnique({ where: { firebaseUid: uid } });
+  if (!entrepreneur && verifiedEmail) {
+    entrepreneur = await prisma.entrepreneur.findUnique({ where: { email: verifiedEmail } });
+  }
+  if (!entrepreneur && verifiedPhone) {
+    entrepreneur = await findByVerifiedPhone(verifiedPhone);
+  }
+
+  if (entrepreneur) {
+    if (entrepreneur.status !== 'ACTIVE') {
+      throw ApiError.unauthorized('Tu cuenta no está activa. Escríbenos para ayudarte');
+    }
+    const updates = {};
+    if (!entrepreneur.firebaseUid) updates.firebaseUid = uid;
+    if (!entrepreneur.phone && verifiedPhone) updates.phone = verifiedPhone;
+    if (Object.keys(updates).length > 0) {
+      entrepreneur = await prisma.entrepreneur.update({ where: { id: entrepreneur.id }, data: updates });
+    }
+  } else {
+    const fromToken = splitName(decoded.name);
+    const newFirstName = firstName?.trim() || fromToken.firstName;
+    const newLastName = lastName?.trim() ?? fromToken.lastName ?? '';
+    const newEmail = verifiedEmail ?? email?.trim().toLowerCase();
+
+    if (!newFirstName || !newEmail) {
+      // Primer ingreso por SMS: la app debe pedir nombre y correo y volver a llamar.
+      return { needsProfile: true, phone: verifiedPhone };
+    }
+    if (!verifiedEmail) {
+      const taken = await prisma.entrepreneur.findUnique({ where: { email: newEmail } });
+      if (taken) {
+        throw ApiError.conflict(
+          'Ese correo ya tiene una cuenta. Entra con tu correo y contraseña y agrega tu teléfono en tu perfil',
+        );
+      }
+    }
+
+    entrepreneur = await prisma.entrepreneur.create({
+      data: {
+        firstName: newFirstName,
+        lastName: newLastName,
+        email: newEmail,
+        phone: verifiedPhone,
+        firebaseUid: uid,
+      },
+    });
+  }
+
+  await prisma.usageEvent.create({
+    data: { entrepreneurId: entrepreneur.id, type: 'LOGIN', metadata: { source: 'mobile', method: provider } },
   });
 
   return { entrepreneur: sanitizeEntrepreneur(entrepreneur), ...issueTokens(entrepreneur) };
@@ -89,6 +209,28 @@ export async function getProfile(entrepreneurId) {
   const entrepreneur = await prisma.entrepreneur.findUnique({ where: { id: entrepreneurId } });
   if (!entrepreneur) throw ApiError.notFound('Cuenta no encontrada');
   return sanitizeEntrepreneur(entrepreneur);
+}
+
+export async function updateProfile(entrepreneurId, data) {
+  const entrepreneur = await prisma.entrepreneur.update({ where: { id: entrepreneurId }, data });
+  return sanitizeEntrepreneur(entrepreneur);
+}
+
+/** El email es con lo que se inicia sesión: se pide la contraseña para cambiarlo. */
+export async function changeEmail(entrepreneurId, { newEmail, password }) {
+  const entrepreneur = await prisma.entrepreneur.findUnique({ where: { id: entrepreneurId } });
+  if (!entrepreneur || !entrepreneur.passwordHash) throw ApiError.notFound('Cuenta no encontrada');
+
+  const valid = await verifyPassword(password, entrepreneur.passwordHash);
+  if (!valid) throw ApiError.badRequest('La contraseña no es correcta');
+
+  const email = newEmail.toLowerCase();
+  if (email === entrepreneur.email) return sanitizeEntrepreneur(entrepreneur);
+  const taken = await prisma.entrepreneur.findUnique({ where: { email } });
+  if (taken) throw ApiError.conflict('Ya existe una cuenta registrada con ese email');
+
+  const updated = await prisma.entrepreneur.update({ where: { id: entrepreneurId }, data: { email } });
+  return sanitizeEntrepreneur(updated);
 }
 
 export async function changePassword(entrepreneurId, { currentPassword, newPassword }) {
