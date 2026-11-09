@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import { ApiError } from '../../utils/apiError.js';
 import { paginationMeta } from '../../utils/http.js';
 import { uploadPublicImage } from '../../utils/storage.js';
+import { assertCanAddBusiness, limitsFor } from '../../utils/planLimits.js';
 
 /** Planes cuyo dueño puede compartir sus negocios con un equipo. */
 export const TEAM_PLANS = ['PRO'];
@@ -55,7 +56,14 @@ export async function getBusinessAccessOrThrow(businessId, entrepreneurId, permi
 
 function withAccess(business, role) {
   const { entrepreneur, ...rest } = business;
-  return { ...rest, role, ownerName: `${entrepreneur.firstName} ${entrepreneur.lastName}`.trim() };
+  return {
+    ...rest,
+    role,
+    ownerName: `${entrepreneur.firstName} ${entrepreneur.lastName}`.trim(),
+    // La app usa el plan del dueño para mostrar u ocultar funciones (voz, Yape, recomendaciones).
+    ownerPlan: entrepreneur.plan,
+    ownerLimits: limitsFor(entrepreneur.plan),
+  };
 }
 
 /** Negocios propios y los compartidos con el emprendedor (equipo de un dueño con plan Pro). */
@@ -93,6 +101,8 @@ export async function getById(businessId, entrepreneurId) {
 }
 
 export async function create(entrepreneurId, data) {
+  const me = await prisma.entrepreneur.findUnique({ where: { id: entrepreneurId }, select: { plan: true } });
+  await assertCanAddBusiness(entrepreneurId, me?.plan);
   const business = await prisma.business.create({ data: { ...data, entrepreneurId }, include: { entrepreneur: OWNER } });
   return withAccess(business, 'OWNER');
 }

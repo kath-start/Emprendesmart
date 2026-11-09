@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { expireEndedTrials } from '../../utils/planLimits.js';
 
 import pkg from '@prisma/client';
 
@@ -36,8 +37,9 @@ export async function expireOverduePlans(now = new Date()) {
     where: { plan: { not: 'FREE' }, planExpiresAt: { lt: limit } },
     data: { plan: 'FREE', planExpiresAt: null },
   });
-  if (count > 0) logger.info(`Planes vencidos pasados a Gratis: ${count}`);
-  return count;
+  const trials = await expireEndedTrials(now);
+  if (count + trials > 0) logger.info(`Planes vencidos pasados a Gratis: ${count} pagados, ${trials} pruebas`);
+  return count + trials;
 }
 
 /** Un aviso de Yape y una solicitud de pago solo se emparejan si ocurrieron con menos de 2 h de diferencia. */

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import { ApiError } from '../../utils/apiError.js';
 import { paginationMeta } from '../../utils/http.js';
+import { assertFeature } from '../../utils/planLimits.js';
 import { getBusinessAccessOrThrow } from '../app-businesses/app-business.service.js';
 import { groqChatCompletion } from '../ai/groq.client.js';
 
@@ -76,7 +77,8 @@ ${lines}`;
  * Reemplaza las recomendaciones de IA que seguían pendientes, para que no se acumulen al regenerar.
  */
 export async function generate(businessId, entrepreneurId) {
-  const { business } = await getBusinessAccessOrThrow(businessId, entrepreneurId, 'insights');
+  const { business, ownerPlan } = await getBusinessAccessOrThrow(businessId, entrepreneurId, 'insights');
+  assertFeature(ownerPlan, 'aiRecommendations', 'Generar recomendaciones con IA');
 
   const since = new Date(Date.now() - 30 * DAY_MS);
   const [products, sales] = await Promise.all([

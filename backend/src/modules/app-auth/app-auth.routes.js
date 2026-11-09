@@ -15,6 +15,7 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   directResetPasswordSchema,
+  demoPlanSchema,
 } from './app-auth.validation.js';
 
 export const appAuthRoutes = Router();
@@ -44,6 +45,12 @@ appAuthRoutes.post('/firebase', firebaseLoginLimiter, validate(firebaseLoginSche
 appAuthRoutes.post('/refresh', validate(refreshSchema), controller.refresh);
 appAuthRoutes.get('/me', authenticateEntrepreneur, controller.me);
 appAuthRoutes.patch('/me', authenticateEntrepreneur, validate(updateProfileSchema), controller.updateProfile);
+// Plan: estado y límites, prueba gratis de Pro (una vez, 15 días) y volver a Gratis.
+appAuthRoutes.get('/plan', authenticateEntrepreneur, controller.planStatus);
+appAuthRoutes.post('/plan/trial', authenticateEntrepreneur, controller.startTrial);
+appAuthRoutes.post('/plan/free', authenticateEntrepreneur, controller.chooseFree);
+// Modo concurso (DEMO_PLANS): activar cualquier plan sin pagar.
+appAuthRoutes.post('/plan/demo', authenticateEntrepreneur, validate(demoPlanSchema), controller.demoPlan);
 appAuthRoutes.post('/change-email', authenticateEntrepreneur, validate(changeEmailSchema), controller.changeEmail);
 appAuthRoutes.post(
   '/change-password',

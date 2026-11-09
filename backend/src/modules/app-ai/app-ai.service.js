@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { ApiError } from '../../utils/apiError.js';
 import { groqChatCompletion } from '../ai/groq.client.js';
+import { limitsFor } from '../../utils/planLimits.js';
 import { getBusinessAccessOrThrow } from '../app-businesses/app-business.service.js';
 import { chatTools, executeTool } from './app-ai.tools.js';
 
@@ -47,7 +48,6 @@ function describeIdeaPlan(business) {
 const MAX_TOOL_ITERATIONS = 5;
 
 /** Consultas diarias al asistente por plan; los planes que no aparecen no tienen límite. */
-const DAILY_AI_LIMITS = { FREE: 5, EMPRENDE: 20 };
 const AI_CHAT_FEATURE = 'AI_CHAT';
 // Perú no cambia de horario: el día empieza a las 00:00 de UTC-5.
 const PERU_OFFSET_MS = 5 * 60 * 60 * 1000;
@@ -65,7 +65,7 @@ function peruDayStart(now = new Date()) {
 export async function getUsage(businessId, entrepreneurId) {
   const { ownerPlan } = await getBusinessAccessOrThrow(businessId, entrepreneurId, 'insights');
 
-  const limit = DAILY_AI_LIMITS[ownerPlan] ?? null;
+  const limit = limitsFor(ownerPlan).aiDaily;
   const dayStart = peruDayStart();
   const used = await prisma.usageEvent.count({
     where: {

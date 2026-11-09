@@ -6,6 +6,7 @@ import { verifyPassword, hashPassword } from '../../utils/password.js';
 import { sendMail } from '../../utils/mailer.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt.js';
 import { verifyFirebaseIdToken } from '../../utils/firebase.js';
+import { activateDemoPlan, planStatus, startTrial, switchToFree } from '../../utils/planLimits.js';
 
 /** Elimina el hash de contraseña antes de exponer el emprendedor. */
 export function sanitizeEntrepreneur(entrepreneur) {
@@ -209,6 +210,25 @@ export async function getProfile(entrepreneurId) {
   const entrepreneur = await prisma.entrepreneur.findUnique({ where: { id: entrepreneurId } });
   if (!entrepreneur) throw ApiError.notFound('Cuenta no encontrada');
   return sanitizeEntrepreneur(entrepreneur);
+}
+
+/** Estado del plan: límites, si puede probar Pro 15 días y si ya está en la prueba. */
+export async function getPlanStatus(entrepreneurId) {
+  const entrepreneur = await prisma.entrepreneur.findUnique({ where: { id: entrepreneurId } });
+  if (!entrepreneur) throw ApiError.notFound('Cuenta no encontrada');
+  return planStatus(entrepreneur);
+}
+
+export async function startProTrial(entrepreneurId) {
+  return sanitizeEntrepreneur(await startTrial(entrepreneurId));
+}
+
+export async function demoPlan(entrepreneurId, { plan }) {
+  return sanitizeEntrepreneur(await activateDemoPlan(entrepreneurId, plan));
+}
+
+export async function chooseFreePlan(entrepreneurId) {
+  return sanitizeEntrepreneur(await switchToFree(entrepreneurId));
 }
 
 export async function updateProfile(entrepreneurId, data) {

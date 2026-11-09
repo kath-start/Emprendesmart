@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { ApiError } from '../../utils/apiError.js';
 import { paginationMeta } from '../../utils/http.js';
+import { assertCanAddSale } from '../../utils/planLimits.js';
 import { getBusinessAccessOrThrow } from '../app-businesses/app-business.service.js';
 
 const SELLER = { select: { id: true, firstName: true, lastName: true } };
@@ -34,7 +35,8 @@ export async function getById(businessId, entrepreneurId, saleId) {
 }
 
 export async function create(businessId, entrepreneurId, { items, notes, paymentMethod }) {
-  await getBusinessAccessOrThrow(businessId, entrepreneurId, 'sell');
+  const { ownerPlan } = await getBusinessAccessOrThrow(businessId, entrepreneurId, 'sell');
+  await assertCanAddSale(businessId, ownerPlan);
 
   const productIds = [...new Set(items.map((item) => item.productId))];
   const products = await prisma.product.findMany({ where: { id: { in: productIds }, businessId } });

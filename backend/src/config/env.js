@@ -64,6 +64,9 @@ export const env = {
     // Sin dominio verificado en Resend, onboarding@resend.dev solo entrega al email de tu cuenta de Resend.
     from: read('MAIL_FROM', { fallback: 'EmprendeSmart <onboarding@resend.dev>' }),
   },
+  // Modo concurso: cualquier cuenta puede activar cualquier plan sin pagar para probarlo.
+  // Para cobrar de verdad, define DEMO_PLANS=false en Render.
+  demoPlans: read('DEMO_PLANS', { fallback: 'true' }) !== 'false',
   firebase: {
     // Solo se usa para validar los ID tokens de Firebase Auth (Google / SMS); no necesita llave privada.
     projectId: read('FIREBASE_PROJECT_ID', { fallback: 'emprendesmart-75583' }),

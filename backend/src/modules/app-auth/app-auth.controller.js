@@ -27,6 +27,14 @@ export const me = asyncHandler(async (req, res) => {
   return ok(res, entrepreneur);
 });
 
+export const planStatus = asyncHandler(async (req, res) => ok(res, await authService.getPlanStatus(req.entrepreneur.id)));
+
+export const startTrial = asyncHandler(async (req, res) => ok(res, await authService.startProTrial(req.entrepreneur.id)));
+
+export const demoPlan = asyncHandler(async (req, res) => ok(res, await authService.demoPlan(req.entrepreneur.id, req.body)));
+
+export const chooseFree = asyncHandler(async (req, res) => ok(res, await authService.chooseFreePlan(req.entrepreneur.id)));
+
 export const updateProfile = asyncHandler(async (req, res) => {
   const entrepreneur = await authService.updateProfile(req.entrepreneur.id, req.body);
   return ok(res, entrepreneur);

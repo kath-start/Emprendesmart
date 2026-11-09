@@ -58,6 +58,10 @@ export const updateProfileSchema = z.object({
     .strict(),
 });
 
+export const demoPlanSchema = z.object({
+  body: z.object({ plan: z.enum(['FREE', 'EMPRENDE', 'CRECIMIENTO', 'PRO']) }).strict(),
+});
+
 export const changeEmailSchema = z.object({
   body: z.object({
     newEmail: z.string().trim().email('Email inválido'),

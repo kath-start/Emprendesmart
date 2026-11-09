@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import { ApiError } from '../../utils/apiError.js';
 import { paginationMeta } from '../../utils/http.js';
 import { uploadPublicImage } from '../../utils/storage.js';
+import { assertCanAddProduct } from '../../utils/planLimits.js';
 import { getBusinessAccessOrThrow } from '../app-businesses/app-business.service.js';
 
 function buildWhere(businessId, query) {
@@ -46,7 +47,8 @@ export async function getById(businessId, entrepreneurId, productId) {
 }
 
 export async function create(businessId, entrepreneurId, data) {
-  await getBusinessAccessOrThrow(businessId, entrepreneurId, 'manageProducts');
+  const { ownerPlan } = await getBusinessAccessOrThrow(businessId, entrepreneurId, 'manageProducts');
+  await assertCanAddProduct(businessId, ownerPlan);
   return prisma.product.create({ data: { ...data, businessId } });
 }
 
