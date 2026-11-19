@@ -34,7 +34,7 @@ export async function getById(businessId, entrepreneurId, saleId) {
   return sale;
 }
 
-export async function create(businessId, entrepreneurId, { items, notes, paymentMethod }) {
+export async function create(businessId, entrepreneurId, { items, notes, paymentMethod, soldAt }) {
   const { ownerPlan } = await getBusinessAccessOrThrow(businessId, entrepreneurId, 'sell');
   await assertCanAddSale(businessId, ownerPlan);
 
@@ -75,6 +75,7 @@ export async function create(businessId, entrepreneurId, { items, notes, payment
         businessId,
         notes,
         ...(paymentMethod ? { paymentMethod } : {}),
+        ...(soldAt ? { soldAt } : {}),
         total,
         sellerId: entrepreneurId,
         items: { create: saleItemsData },

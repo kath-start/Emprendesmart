@@ -18,6 +18,12 @@ export const createSchema = z.object({
   body: z.object({
     notes: z.string().max(500).optional(),
     paymentMethod: z.enum(['efectivo', 'yape', 'plin']).optional(),
+    // Hora real de una venta hecha sin internet en la app y subida después (máx. 7 días atrás).
+    soldAt: z.coerce
+      .date()
+      .refine((d) => d.getTime() <= Date.now() + 5 * 60 * 1000, 'La fecha de venta no puede ser futura')
+      .refine((d) => d.getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000, 'La venta es de hace más de 7 días')
+      .optional(),
     items: z
       .array(
         z.object({
